@@ -1,3 +1,4 @@
+# Kommentar
 print("Umrechnung der Temperaturen von Celsius in Fahrenheit") 
 print("------------------------------------------------------------") 
 print() 
