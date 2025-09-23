@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>OOP Fantasy-Figuren – Kollisionen & Spawn</title>
+  <style>
+    :root {
+      --size: 50px; /* angenommene visuelle Größe eines Emojis */
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(135deg, #e0f7fa, #fce4ec);
+      font-family: system-ui, Arial, sans-serif;
+    }
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.92);
+      padding: 10px 12px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      z-index: 1000;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #controls input[type="number"] {
+      width: 80px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #cfd8dc;
+      font-size: 14px;
+    }
+    #controls button {
+      padding: 6px 10px;
+      border: 0;
+      border-radius: 8px;
+      background: #1976d2;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .figur {
+      position: absolute;
+      font-size: 2.6rem;
+      cursor: pointer;
+      user-select: none;
+      will-change: transform, opacity;
+      transition: opacity 120ms linear;
+      transform: translate3d(0,0,0);
+    }
+    /* simpler, eigener Tooltip */
+    .tooltip {
+      position: absolute;
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 999;
+      transform: translate(-50%, -120%);
+      animation: fadeIn 120ms ease-out;
+    }
+    .tooltip::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -6px;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: rgba(0,0,0,0.85);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -110%); }
+      to { opacity: 1; transform: translate(-50%, -120%); }
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="anzahl">Anzahl Figuren:</label>
+    <input type="number" id="anzahl" value="2" min="1" max="100" />
+    <button id="erzeugen">Erzeugen</button>
+  </div>
+
+  <script>
+    // === Utils ===
+    const EMOJIS = ["🧙‍♂️","🧝‍♀️","🧟","🦸‍♂️","🐉","👾","🧙‍♀️","🦹‍♀️"];
+    const SIZE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--size')) || 50;
+    const TOL = 100;                 // Kollisionstoleranz in px für x UND y
+    const SPAWN_COOLDOWN_MS = 1200;  // verhindert Spam bei anhaltendem Kontakt
+    const HALF_ALPHA_MS = 10000;     // 10 Sekunden 50% Transparenz
+    const TOOLTIP_MS = 5000;         // 5 Sekunden Tooltip „Autsch“
+
+    let NEXT_ID = 1;
+
+    class FantasyFigur {
+      constructor(name, emoji, x = null, y = null, vx = null, vy = null) {
+        this.id = NEXT_ID++;
+        this.name = name;
+        this.emoji = emoji;
+
+        // Startposition & Geschwindigkeit
+        this.x = x ?? Math.random() * (window.innerWidth - SIZE);
+        this.y = y ?? Math.random() * (window.innerHeight - SIZE);
+        const speed = 2.5 + Math.random() * 2.5; // 2.5–5.0 px/frame
+        const angle = Math.random() * Math.PI * 2;
+        this.vx = vx ?? Math.cos(angle) * speed;
+        this.vy = vy ?? Math.sin(angle) * speed;
+
+        // DOM-Element
+        this.el = document.createElement('div');
+        this.el.className = 'figur';
+        this.el.textContent = this.emoji;
+        this.el.title = this.name; // MouseOver zeigt Namen
+        document.body.appendChild(this.el);
+
+        this._normalTitle = this.name;
+        this._restoreOpacityTO = null;
+        this._restoreTitleTO = null;
+
+        this.updatePosition();
+      }
+
+      updatePosition() {
+        this.el.style.left = this.x + 'px';
+        this.el.style.top = this.y + 'px';
+      }
+
+      step() {
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Kanten-Bounce
+        if (this.x <= 0) { this.x = 0; this.vx *= -1; }
+        if (this.x >= window.innerWidth - SIZE) { this.x = window.innerWidth - SIZE; this.vx *= -1; }
+        if (this.y <= 0) { this.y = 0; this.vy *= -1; }
+        if (this.y >= window.innerHeight - SIZE) { this.y = window.innerHeight - SIZE; this.vy *= -1; }
+
+        this.updatePosition();
+      }
+
+      // Visuelles Feedback nach Kollision
+      collidedFeedback() {
+        // Tooltip „Autsch“ 5s lang anzeigen
+        this.showTooltip("Autsch", TOOLTIP_MS);
+
+        // 50% Transparenz für 10s
+        this.el.style.opacity = '0.5';
+        if (this._restoreOpacityTO) clearTimeout(this._restoreOpacityTO);
+        this._restoreOpacityTO = setTimeout(() => {
+          this.el.style.opacity = '1';
+        }, HALF_ALPHA_MS);
+
+        // title temporär auf „Autsch“, danach zurück
+        const prevTitle = this._normalTitle;
+        this.el.title = "Autsch";
+        if (this._restoreTitleTO) clearTimeout(this._restoreTitleTO);
+        this._restoreTitleTO = setTimeout(() => {
+          this.el.title = prevTitle;
+        }, TOOLTIP_MS);
+      }
+
+      showTooltip(text, durationMs = 2000) {
+        const tip = document.createElement('div');
+        tip.className = 'tooltip';
+        tip.textContent = text;
+        document.body.appendChild(tip);
+        // Position über der Figur
+        const rect = this.el.getBoundingClientRect();
+        tip.style.left = (rect.left + rect.width / 2) + 'px';
+        tip.style.top  = (rect.top) + 'px';
+
+        setTimeout(() => tip.remove(), durationMs);
+      }
+
+      remove() {
+        this.el.remove();
+        if (this._restoreOpacityTO) clearTimeout(this._restoreOpacityTO);
+        if (this._restoreTitleTO) clearTimeout(this._restoreTitleTO);
+      }
+    }
+
+    let figuren = [];
+    // Map für Kollisions-Cooldowns: key "idA-idB" -> timestamp
+    const lastCollision = new Map();
+
+    function collisionKey(a, b) {
+      const [i, j] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+      return `${i}-${j}`;
+    }
+
+    function areColliding(a, b) {
+      // Toleranzbedingung: |dx| <= 100 UND |dy| <= 100
+      return (Math.abs(a.x - b.x) <= TOL) && (Math.abs(a.y - b.y) <= TOL);
+    }
+
+    function handleCollision(a, b) {
+      // Kollisionspunkt (mittig)
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+
+      // Neues Objekt am Kollisionspunkt
+      const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+      const name = `Spawn ${NEXT_ID}`;
+      // leichte neue Richtung
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 2;
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
+
+      const spawned = new FantasyFigur(name, emoji, cx, cy, vx, vy);
+      figuren.push(spawned);
+      spawned.showTooltip("Hallo!", 1500);
+
+      // Feedback an die kollidierten
+      a.collidedFeedback();
+      b.collidedFeedback();
+    }
+
+    function checkCollisions() {
+      const now = performance.now();
+      for (let i = 0; i < figuren.length; i++) {
+        for (let j = i + 1; j < figuren.length; j++) {
+          const A = figuren[i], B = figuren[j];
+          if (!areColliding(A, B)) continue;
+
+          const key = collisionKey(A, B);
+          const last = lastCollision.get(key) ?? -Infinity;
+          if (now - last >= SPAWN_COOLDOWN_MS) {
+            lastCollision.set(key, now);
+            handleCollision(A, B);
+          }
+        }
+      }
+    }
+
+    function animationLoop() {
+      figuren.forEach(f => f.step());
+      checkCollisions();
+      requestAnimationFrame(animationLoop);
+    }
+
+    function clearAll() {
+      figuren.forEach(f => f.remove());
+      figuren = [];
+      lastCollision.clear();
+    }
+
+    function erzeugeFiguren(anzahl) {
+      clearAll();
+      for (let i = 0; i < anzahl; i++) {
+        const name = i === 0 ? "Kevin" : (i === 1 ? "Gala" : `Figur ${i+1}`);
+        const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+        figuren.push(new FantasyFigur(name, emoji));
+      }
+    }
+
+    // UI
+    document.getElementById('erzeugen').addEventListener('click', () => {
+      const n = Math.max(1, Math.min(100, parseInt(document.getElementById('anzahl').value || '1', 10)));
+      erzeugeFiguren(n);
+    });
+
+    // Start
+    erzeugeFiguren(parseInt(document.getElementById('anzahl').value, 10));
+    animationLoop();
+
+    // Fensteränderung: Figuren im sichtbaren Bereich halten
+    window.addEventListener('resize', () => {
+      figuren.forEach(f => {
+        f.x = Math.min(Math.max(0, f.x), window.innerWidth - SIZE);
+        f.y = Math.min(Math.max(0, f.y), window.innerHeight - SIZE);
+        f.updatePosition();
+      });
+    });
+  </script>
+</body>
+</html>

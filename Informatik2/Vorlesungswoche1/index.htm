@@ -1,0 +1,117 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>OOP mit Fantasy-Figuren</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      margin: 2rem;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    pre {
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    #output {
+      background: #fff;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <h1>Objektorientierung mit Fantasy-Figuren</h1>
+  <p>In diesem Beispiel haben unsere Figuren Attribute und Fähigkeiten. JavaScript-Klassen helfen uns, solche Strukturen einfach zu modellieren.</p>
+
+  <h2>Beispielcode:</h2>
+  <pre>
+// Klasse für Fantasy-Figuren
+class FantasyFigur {
+  constructor(name, groesse, alter, laseraugen) {
+    this.name = name;
+    this.groesse = groesse;
+    this.alter = alter;
+    this.laseraugen = laseraugen;
+  }
+
+  doppelsprung() {
+    return this.name + " springt doppelt so hoch!";
+  }
+
+  fliegen() {
+    return this.name + " fliegt durch die Lüfte!";
+  }
+
+  laserSchneiden() {
+    if (this.laseraugen) {
+      return this.name + " schneidet mit Laseraugen!";
+    } else {
+      return this.name + " hat keine Laseraugen.";
+    }
+  }
+}
+
+// Objekte erzeugen
+const kevin = new FantasyFigur("Kevin", 180, 25, true);
+const gala = new FantasyFigur("Gala", 170, 22, false);
+
+console.log(kevin.laserSchneiden());
+console.log(gala.fliegen());
+  </pre>
+
+  <h2>Ausgabe im Browser:</h2>
+  <div id="output"></div>
+
+  <script>
+    // Klasse für Fantasy-Figuren
+    class FantasyFigur {
+      constructor(name, groesse, alter, laseraugen) {
+        this.name = name;
+        this.groesse = groesse;
+        this.alter = alter;
+        this.laseraugen = laseraugen;
+      }
+
+      doppelsprung() {
+        return this.name + " springt doppelt so hoch!";
+      }
+
+      fliegen() {
+        return this.name + " fliegt durch die Lüfte!";
+      }
+
+      laserSchneiden() {
+        if (this.laseraugen) {
+          return this.name + " schneidet mit Laseraugen!";
+        } else {
+          return this.name + " hat keine Laseraugen.";
+        }
+      }
+    }
+
+    // Objekte erzeugen
+    const kevin = new FantasyFigur("Kevin", 180, 25, true);
+    const gala = new FantasyFigur("Gala", 170, 22, false);
+
+    // Fähigkeiten ausführen
+    const output = document.getElementById("output");
+    const p1 = document.createElement("p");
+    p1.textContent = kevin.laserSchneiden();
+    output.appendChild(p1);
+
+    const p2 = document.createElement("p");
+    p2.textContent = gala.fliegen();
+    output.appendChild(p2);
+  </script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>OOP Fantasy-Figuren Animation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background: linear-gradient(135deg, #e0f7fa, #fce4ec);
+    }
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      z-index: 1000;
+    }
+    .figur {
+      position: absolute;
+      font-size: 2.5rem;
+      cursor: pointer;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="anzahl">Anzahl Figuren:</label>
+    <input type="number" id="anzahl" value="2" min="1" max="50">
+    <button id="erzeugen">Erzeugen</button>
+  </div>
+
+  <script>
+    // === Klasse für Fantasy-Figuren ===
+    class FantasyFigur {
+      constructor(name, emoji) {
+        this.name = name;
+        this.emoji = emoji;
+
+        // Position und Geschwindigkeit zufällig setzen
+        this.x = Math.random() * (window.innerWidth - 50);
+        this.y = Math.random() * (window.innerHeight - 50);
+        this.vx = (Math.random() - 0.5) * 6; // Geschwindigkeit X
+        this.vy = (Math.random() - 0.5) * 6; // Geschwindigkeit Y
+
+        // HTML-Element erstellen
+        this.el = document.createElement("div");
+        this.el.className = "figur";
+        this.el.textContent = this.emoji;
+        this.el.title = this.name; // Tooltip mit Namen
+        document.body.appendChild(this.el);
+
+        this.updatePosition();
+      }
+
+      updatePosition() {
+        this.el.style.left = this.x + "px";
+        this.el.style.top = this.y + "px";
+      }
+
+      bewegen() {
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Bildschirmgrenzen prüfen
+        if (this.x <= 0 || this.x >= window.innerWidth - 50) {
+          this.vx *= -1;
+        }
+        if (this.y <= 0 || this.y >= window.innerHeight - 50) {
+          this.vy *= -1;
+        }
+
+        this.updatePosition();
+      }
+    }
+
+    let figuren = [];
+
+    function animationLoop() {
+      figuren.forEach(f => f.bewegen());
+      requestAnimationFrame(animationLoop);
+    }
+
+    // Figuren erzeugen
+    function erzeugeFiguren(anzahl) {
+      // Alte Figuren entfernen
+      figuren.forEach(f => f.el.remove());
+      figuren = [];
+
+      const emojis = ["🧙‍♂️", "🧝‍♀️", "🧟", "🦸‍♂️", "🐉", "👾"];
+      for (let i = 0; i < anzahl; i++) {
+        const name = "Figur " + (i + 1);
+        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+        figuren.push(new FantasyFigur(name, emoji));
+      }
+    }
+
+    // Button-Event
+    document.getElementById("erzeugen").addEventListener("click", () => {
+      const anzahl = parseInt(document.getElementById("anzahl").value);
+      erzeugeFiguren(anzahl);
+    });
+
+    // Initial mit 2 Figuren starten
+    erzeugeFiguren(2);
+    animationLoop();
+
+    // Responsiv reagieren bei Fenstergrößenänderung
+    window.addEventListener("resize", () => {
+      figuren.forEach(f => {
+        f.x = Math.min(f.x, window.innerWidth - 50);
+        f.y = Math.min(f.y, window.innerHeight - 50);
+      });
+    });
+  </script>
+</body>
+</html>
