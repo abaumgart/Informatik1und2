@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>OOP Fantasy-Figuren – stabile Kollisionen</title>
+  <style>
+    :root { --size: 50px; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      background: linear-gradient(135deg, #e0f7fa, #fce4ec);
+      font-family: system-ui, Arial, sans-serif;
+    }
+    #controls {
+      position: fixed; top: 10px; left: 10px; z-index: 1000;
+      background: rgba(255,255,255,0.92); padding: 10px 12px; border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15); display: flex; gap: 8px; align-items: center;
+    }
+    #controls input[type="number"] {
+      width: 80px; padding: 4px 6px; border-radius: 6px; border: 1px solid #cfd8dc; font-size: 14px;
+    }
+    #controls button {
+      padding: 6px 10px; border: 0; border-radius: 8px; background: #1976d2; color: #fff; font-weight: 600; cursor: pointer;
+    }
+    .figur {
+      position: absolute; font-size: 2.6rem; cursor: pointer; user-select: none;
+      will-change: transform, opacity; transition: opacity 120ms linear; transform: translate3d(0,0,0);
+    }
+    .tooltip {
+      position: absolute; background: rgba(0,0,0,0.85); color: #fff;
+      padding: 6px 8px; border-radius: 6px; font-size: 12px; pointer-events: none;
+      white-space: nowrap; z-index: 999; transform: translate(-50%, -120%); animation: fadeIn 120ms ease-out;
+    }
+    .tooltip::after {
+      content: ""; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+      border: 6px solid transparent; border-top-color: rgba(0,0,0,0.85);
+    }
+    @keyframes fadeIn { from{opacity:0; transform:translate(-50%,-110%)} to{opacity:1; transform:translate(-50%,-120%)} }
+
+    #info-panel {
+      position: fixed; min-width: 220px; max-width: 320px; z-index: 1200;
+      background: #ffffff; border: 1px solid #e0e0e0; border-radius: 10px;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.18); padding: 10px 12px; display: none;
+    }
+    #info-panel h4 { margin: 0 0 6px 0; font-size: 14px; color: #37474f; }
+    #info-panel ul { margin: 0; padding-left: 18px; }
+    #info-panel li { font-size: 13px; margin: 4px 0; }
+    #info-panel .hint { font-size: 12px; color: #607d8b; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="anzahl">Anzahl Figuren:</label>
+    <input type="number" id="anzahl" value="2" min="1" max="100" />
+    <button id="erzeugen">Erzeugen</button>
+  </div>
+
+  <div id="info-panel" role="dialog" aria-live="polite"></div>
+
+  <script>
+    // === Konstanten & Utils Array für die Speicherung der Figuren ===
+    const EMOJIS = ["🧙‍♂️","🧝‍♀️","🧟","🦸‍♂️","🐉","👾","🧙‍♀️","🦹‍♀️"];
+    const SIZE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--size')) || 50;
+    const TOL = 100;                     // Kollisionstoleranz |dx|<=100 && |dy|<=100
+    const SPAWN_COOLDOWN_MS = 1200;      // Cooldown pro Paar
+    const HALF_ALPHA_MS = 10000;         // 10 s halbtransparent
+    const TOOLTIP_MS = 5000;             // 5 s „Autsch“
+    const MAX_SPAWNS_PER_FRAME = 3;      // harte Bremse gegen Lawinen
+    const MAX_OBJECTS = 400;             // Sicherheitsnetz
+
+    let NEXT_ID = 1;
+
+    const elementToInstance = new WeakMap();
+
+    class FantasyFigur {
+      constructor(name, emoji, x = null, y = null, vx = null, vy = null) {
+        this.id = NEXT_ID++;
+        this.name = name;
+        this.emoji = emoji;
+
+        this.groesse = 160 + Math.floor(Math.random()*60);
+        this.alter = 18 + Math.floor(Math.random()*30);
+        this.laseraugen = Math.random() < 0.6;
+
+        this.x = x ?? Math.random() * (window.innerWidth - SIZE);
+        this.y = y ?? Math.random() * (window.innerHeight - SIZE);
+        const speed = 2.5 + Math.random() * 2.5;
+        const angle = Math.random() * Math.PI * 2;
+        this.vx = vx ?? Math.cos(angle) * speed;
+        this.vy = vy ?? Math.sin(angle) * speed;
+
+        this.el = document.createElement('div');
+        this.el.className = 'figur';
+        this.el.textContent = this.emoji;
+        this.el.title = this.name;
+        document.body.appendChild(this.el);
+
+        elementToInstance.set(this.el, this);
+
+        this._normalTitle = this.name;
+        this._restoreOpacityTO = null;
+        this._restoreTitleTO = null;
+
+        this.el.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          showInfoPanelFor(this, ev.clientX, ev.clientY);
+        });
+
+        this.updatePosition();
+      }
+
+      doppelsprung() { return `${this.name} macht einen Doppelsprung!`; }
+      fliegen()       { return `${this.name} fliegt durch die Lüfte!`; }
+      laserSchneiden(){ return this.laseraugen ? `${this.name} schneidet mit Laseraugen!` : `${this.name} hat keine Laseraugen.`; }
+
+      updatePosition() {
+        this.el.style.left = this.x + 'px';
+        this.el.style.top  = this.y + 'px';
+      }
+
+      step() {
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.x <= 0) { this.x = 0; this.vx *= -1; }
+        if (this.x >= window.innerWidth - SIZE) { this.x = window.innerWidth - SIZE; this.vx *= -1; }
+        if (this.y <= 0) { this.y = 0; this.vy *= -1; }
+        if (this.y >= window.innerHeight - SIZE) { this.y = window.innerHeight - SIZE; this.vy *= -1; }
+
+        this.updatePosition();
+      }
+
+      collidedFeedback() {
+        this.showTooltip("Autsch", TOOLTIP_MS);
+
+        this.el.style.opacity = '0.5';
+        if (this._restoreOpacityTO) clearTimeout(this._restoreOpacityTO);
+        this._restoreOpacityTO = setTimeout(() => { this.el.style.opacity = '1'; }, HALF_ALPHA_MS);
+
+        const prevTitle = this._normalTitle;
+        this.el.title = "Autsch";
+        if (this._restoreTitleTO) clearTimeout(this._restoreTitleTO);
+        this._restoreTitleTO = setTimeout(() => { this.el.title = prevTitle; }, TOOLTIP_MS);
+      }
+
+      showTooltip(text, durationMs = 2000) {
+        const tip = document.createElement('div');
+        tip.className = 'tooltip';
+        tip.textContent = text;
+        document.body.appendChild(tip);
+        const rect = this.el.getBoundingClientRect();
+        tip.style.left = (rect.left + rect.width / 2) + 'px';
+        tip.style.top  = (rect.top) + 'px';
+        setTimeout(() => tip.remove(), durationMs);
+      }
+
+      remove() {
+        this.el.remove();
+        if (this._restoreOpacityTO) clearTimeout(this._restoreOpacityTO);
+        if (this._restoreTitleTO) clearTimeout(this._restoreTitleTO);
+      }
+    }
+
+    // Info-Panel (nicht blockierend)
+    const infoPanel = document.getElementById('info-panel');
+    let infoHideTO = null;
+
+    function showInfoPanelFor(figur, x, y) {
+      infoPanel.innerHTML = `
+        <h4>${figur.name}</h4>
+        <ul>
+          <li>Größe: ${figur.groesse} cm</li>
+          <li>Alter: ${figur.alter}</li>
+          <li>Laseraugen: ${figur.laseraugen ? "Ja" : "Nein"}</li>
+        </ul>
+        <h4>Fähigkeiten</h4>
+        <ul>
+          <li>${figur.doppelsprung()}</li>
+          <li>${figur.fliegen()}</li>
+          <li>${figur.laserSchneiden()}</li>
+        </ul>
+        <div class="hint">Schließen: außerhalb klicken oder 3 s warten</div>
+      `;
+
+      const pad = 12;
+      const panelW = 260, panelH = 160;
+      let px = x + 12, py = y + 12;
+      if (px + panelW > window.innerWidth - pad) px = x - panelW - 12;
+      if (py + panelH > window.innerHeight - pad) py = y - panelH - 12;
+
+      infoPanel.style.left = Math.max(pad, Math.min(px, window.innerWidth - pad)) + 'px';
+      infoPanel.style.top  = Math.max(pad, Math.min(py, window.innerHeight - pad)) + 'px';
+      infoPanel.style.display = 'block';
+
+      if (infoHideTO) clearTimeout(infoHideTO);
+      infoHideTO = setTimeout(hideInfoPanel, 3000);
+    }
+    function hideInfoPanel() {
+      infoPanel.style.display = 'none';
+      if (infoHideTO) { clearTimeout(infoHideTO); infoHideTO = null; }
+    }
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#info-panel') || e.target.closest('.figur')) return;
+      hideInfoPanel();
+    });
+
+    let figuren = [];
+    const lastCollision = new Map(); // key "idA-idB" -> timestamp
+
+    function collisionKey(a, b) {
+      const [i, j] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+      return `${i}-${j}`;
+    }
+    function areColliding(a, b) {
+      return (Math.abs(a.x - b.x) <= TOL) && (Math.abs(a.y - b.y) <= TOL);
+    }
+
+    // WICHTIG: Kollisionen zuerst nur sammeln – keine Spawns hier!
+    function collectCollisions() {
+      const pairs = [];
+      const now = performance.now();
+      const n = figuren.length; // Länge „einfrieren“, keine neuen während der Schleife
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const A = figuren[i], B = figuren[j];
+          if (!areColliding(A, B)) continue;
+          const key = collisionKey(A, B);
+          const last = lastCollision.get(key) ?? -Infinity;
+          if (now - last >= SPAWN_COOLDOWN_MS) {
+            pairs.push([A, B, key, now]);
+          }
+        }
+      }
+      return pairs;
+    }
+
+    // Nachgelagerte Verarbeitung mit Frame-Limit & Objektdeckel
+    function processCollisions(pairs) {
+      if (!pairs.length) return;
+      let spawnsThisFrame = 0;
+
+      for (const [A, B, key, now] of pairs) {
+        if (spawnsThisFrame >= MAX_SPAWNS_PER_FRAME) break;
+        if (figuren.length >= MAX_OBJECTS) break;
+
+        lastCollision.set(key, now);
+
+        // Spawn an Mittelpunkt
+        const cx = (A.x + B.x) / 2;
+        const cy = (A.y + B.y) / 2;
+        const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+        const name = `Spawn ${NEXT_ID}`;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 2;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+
+        const spawned = new FantasyFigur(name, emoji, cx, cy, vx, vy);
+        figuren.push(spawned);
+        spawned.showTooltip("Hallo!", 1500);
+
+        // Feedback
+        A.collidedFeedback();
+        B.collidedFeedback();
+
+        spawnsThisFrame++;
+      }
+    }
+
+    function animationLoop() {
+      // 1) bewegen
+      for (const f of figuren) f.step();
+      // 2) Kollisionen sammeln
+      const pairs = collectCollisions();
+      // 3) Kollisionen verarbeiten (limitiert)
+      processCollisions(pairs);
+      requestAnimationFrame(animationLoop);
+    }
+
+    function clearAll() {
+      figuren.forEach(f => f.remove());
+      figuren = [];
+      lastCollision.clear();
+    }
+
+    function erzeugeFiguren(anzahl) {
+      clearAll();
+      for (let i = 0; i < anzahl; i++) {
+        const name = i === 0 ? "Kevin" : (i === 1 ? "Gala" : `Figur ${i+1}`);
+        const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+        figuren.push(new FantasyFigur(name, emoji));
+      }
+    }
+
+    document.getElementById('erzeugen').addEventListener('click', () => {
+      hideInfoPanel();
+      const n = Math.max(1, Math.min(100, parseInt(document.getElementById('anzahl').value || '1', 10)));
+      erzeugeFiguren(n);
+    });
+
+    erzeugeFiguren(parseInt(document.getElementById('anzahl').value, 10));
+    animationLoop();
+
+    window.addEventListener('resize', () => {
+      figuren.forEach(f => {
+        f.x = Math.min(Math.max(0, f.x), window.innerWidth - SIZE);
+        f.y = Math.min(Math.max(0, f.y), window.innerHeight - SIZE);
+        f.updatePosition();
+      });
+      hideInfoPanel();
+    });
+  </script>
+</body>
+</html>
