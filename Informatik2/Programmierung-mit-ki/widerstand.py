@@ -1,7 +1,7 @@
 """Einfache Klasse zur Verdeutlichung des Umgangs mit elektrischen Widerständen.
 
 Das Skript ist bewusst knapp, aber nachvollziehbar kommentiert, damit es für
-Studierende gut verständlich bleibt.
+Studierende gut verständlich bleibt..
 """
 
 
