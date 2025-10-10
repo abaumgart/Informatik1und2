@@ -307,7 +307,7 @@ class App:
         self.render()  # initialer Frame
 
     def _setup_world(self):
-        self.world.add_pflanzen_random(anzahl=10)
+        self.world.add_pflanzen_random(anzahl=100)
         # Tiere
         self.world.add_tier(Loewe("Simba"))
         self.world.add_tier(Tiger("ShereKhan"))
