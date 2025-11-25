@@ -7,7 +7,7 @@ print(i, i*i)
 i = 4
 print(i, i*i)
 print()
-for i in 1,2,3,4:
+for i in range(1,11):
 	print(i, i*i)
 
 
