@@ -71,8 +71,6 @@ print(f2)
 # NumPy liefert hier **nur** die Nullstellen von f''(x),
 # also Stellen, an denen die zweite Ableitung = 0 ist.
 # Das sind *Kandidaten* für Wendepunkte.
-#
-# Kurzfassung für Studierende:
 # Ein Wendepunkt liegt nur dann vor,
 # wenn sich an dieser Stelle die Krümmung ändert.
 # f''(x) = 0 ist also eine notwendige,
